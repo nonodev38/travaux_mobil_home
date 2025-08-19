@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Liste Travaux A Réaliser</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f7f9fc;
+      margin: 0;
+      padding: 0;
+    }
+    h1 {
+      text-align: center;
+      margin-top: 30px;
+      color: #1976d2;
+    }
+    .container {
+      max-width: 900px;
+      margin: 40px auto;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px #1976d233;
+      padding: 30px;
+    }
+    .search-bar {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .search-bar input {
+      width: 50%;
+      padding: 10px 15px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 1em;
+      outline: none;
+    }
+    .search-bar button {
+      margin-left: 10px;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 8px;
+      background: #1976d2;
+      color: white;
+      font-size: 0.95em;
+      cursor: pointer;
+    }
+    .search-bar button:hover {
+      background: #125a9c;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 12px 8px;
+      border-bottom: 1px solid #e3f2fd;
+      text-align: left;
+    }
+    th {
+      background: #e3f2fd;
+      color: #1976d2;
+      font-weight: bold;
+    }
+    .empty {
+      color: #888;
+      text-align: center;
+      margin-top: 40px;
+    }
+    #error-message {
+      color: red;
+      margin-top: 20px;
+    }
+    .remaining-time {
+      font-weight: bold;
+      color: #ff9800;
+    }
+    .row-travaux:hover {
+      cursor: pointer;
+      background: #e3f2fd44;
+    }
+    .row-done:hover {
+      cursor: pointer;
+      background: #e8f5e944;
+    }
+
+    .date-fr {
+      position: absolute;
+      top: 24px;
+      right: 40px;
+      background: linear-gradient(90deg, #1976d2 60%, #42a5f5 100%);
+      color: #fff;
+      font-size: 1.15em;
+      padding: 12px 32px 12px 48px;
+      border-radius: 28px;
+      box-shadow: 0 2px 16px #1976d233;
+      font-family: 'Segoe UI', 'Arial', sans-serif;
+      letter-spacing: 0.5px;
+      z-index: 10;
+      user-select: none;
+      min-width: 220px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: box-shadow 0.2s, background 0.2s;
+    }
+    .date-fr:hover {
+      box-shadow: 0 4px 24px #1976d244;
+      background: linear-gradient(90deg, #1565c0 60%, #64b5f6 100%);
+    }
+    .date-fr .icon {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
+      margin-left: -32px;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 6px solid #b3d1ff;
+      border-top: 6px solid #1976d2;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg);}
+      100% { transform: rotate(360deg);}
+    }
+  </style>
+</head>
+<body>
+
+  <div id="loader" style="display:flex;align-items:center;justify-content:center;position:fixed;top:0;left:0;width:100vw;height:100vh;background:#fff;z-index:9999;">
+    <div style="text-align:center;">
+      <div class="spinner"></div>
+      <div style="margin-top:18px;color:#1976d2;font-weight:bold;">Chargement...</div>
+    </div>
+  </div>
+   <div class="date-fr" id="date-fr"></div>
+  <h1>Liste Travaux A Réaliser</h1>
+  <div class="container">
+    <div class="search-bar">
+      <input type="text" id="searchInput" placeholder="Rechercher par famille...">
+      <button id="clearSearch">Effacer</button>
+    </div>
+    <div id="error-message"></div>
+  <div id="table-container"></div>
+  <h2 style="text-align:center; color:#388e3c; margin-top:40px;">Liste Travaux Réalisés</h2>
+  <div id="table-done-container"></div>
+    <div id="modal-validation" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:#0008; z-index:1000; align-items:center; justify-content:center;">
+      <div style="background:#fff; border-radius:10px; padding:30px; min-width:320px; max-width:90vw; box-shadow:0 2px 16px #1976d233;">
+        <h2 style="margin-top:0; color:#1976d2;">Valider cette ligne de travaux</h2>
+        <div id="modal-content"></div>
+        <div style="margin-top:30px; text-align:right;">
+          <button id="modal-cancel" style="margin-right:10px; padding:8px 18px; border-radius:6px; border:none; background:#eee; color:#333; cursor:pointer;">Annuler</button>
+          <button id="modal-accept" style="padding:8px 18px; border-radius:6px; border:none; background:#1976d2; color:#fff; cursor:pointer;">Accepter</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+   
+    const URL_TRAVAUX = "https://script.google.com/macros/s/AKfycbweaqiLce1oVK__SZWr_X_GG-Z9rTZQKAENzii1EwXOGy-KYqinKkFeoJdq9EJecwXz/exec";
+    let travauxRows = [];
+    let timerInterval = null;
+function parseDate(str) {
+  // Expects format "dd/mm/yyyy hh:mm" or ISO format
+  if (!str) return null;
+  if (str.includes('T')) {
+    // Format ISO
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const [date, time] = str.split(' ');
+  if (!date || !time) return null;
+  const [d, m, y] = date.split('/');
+  const [h, min] = time.split(':');
+  return new Date(`${y}-${m}-${d}T${h}:${min}:00`);
+}
+
+    function getRemainingTime(dateFin) {
+      const now = new Date();
+      const end = typeof dateFin === "string" ? parseDate(dateFin) : dateFin;
+      if (!end || isNaN(end.getTime())) return "Inconnu";
+      const diffMs = end.getTime() - now.getTime();
+      if (diffMs <= 0) return "Temps écoulé en attente d'une fiche travaux";
+      const diffJ = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      if (diffJ >= 1) {
+        return diffJ === 1 ? "1 jour" : `${diffJ} jours`;
+      }
+      const diffH = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffMin = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      return `${diffH}h ${diffMin}min`;
+    }
+
+    function getElapsedTime(dateDemande) {
+  // ...existing code...
+    }
+
+    async function fetchTravaux() {
+      const errorDiv = document.getElementById("error-message");
+      errorDiv.textContent = "";
+      try {
+        const res = await fetch(URL_TRAVAUX);
+        if (!res.ok) {
+          errorDiv.textContent = `Erreur connexion : ${res.status} ${res.statusText}`;
+          return [];
+        }
+        const data = await res.json();
+        // Skip header row
+        return Array.isArray(data) ? data.slice(1) : (data.values ? data.values.slice(1) : []);
+      } catch (err) {
+        errorDiv.textContent = "Erreur de connexion au serveur : " + err;
+        return [];
+      }
+    }
+
+  function formatDateFr(str) {
+    if (!str) return "";
+    let d = parseDate(str);
+    if (!d || isNaN(d.getTime())) return str;
+    const pad = n => n.toString().padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function renderDoneTable(rows) {
+    const container = document.getElementById("table-done-container");
+    container.innerHTML = "";
+    // Filtre les lignes validées (Travaux ok = 1)
+    const doneRows = [...rows].filter(row => Number(row[8]) === 1);
+    if (!doneRows.length) {
+      container.innerHTML = '<div class="empty">Aucun travaux réalisé.</div>';
+      return;
+    }
+    const table = document.createElement("table");
+    table.style.fontSize = "0.95em";
+    table.style.borderRadius = "8px";
+    table.style.boxShadow = "0 1px 8px #388e3c22";
+    table.innerHTML = `
+      <thead>
+        <tr style="background:#e8f5e9; color:#388e3c;">
+          <th style="padding:6px 4px;">Type</th>
+          <th style="padding:6px 4px;">Numéro</th>
+          <th style="padding:6px 4px;">Famille</th>
+          <th style="padding:6px 4px;">Sous-famille</th>
+          <th style="padding:6px 4px;">Date Fin Travaux</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${doneRows.map((row, idx) => {
+          const [,dateFinTravaux, type, numero, famille, sousfamille] = row;
+          return `<tr class="row-done" data-idx="${idx}" style="height:28px; cursor:pointer;">
+            <td style="padding:6px 4px;">${type || ""}</td>
+            <td style="padding:6px 4px;">${numero || ""}</td>
+            <td style="padding:6px 4px;">${famille || ""}</td>
+            <td style="padding:6px 4px;">${sousfamille || ""}</td>
+            <td style="padding:6px 4px;">${formatDateFr(dateFinTravaux)}</td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    `;
+    container.appendChild(table);
+    // Ajout du click sur chaque ligne du tableau secondaire
+    document.querySelectorAll('.row-done').forEach(tr => {
+      tr.addEventListener('click', function() {
+        const idx = parseInt(this.getAttribute('data-idx'));
+        showUnvalidateModal(doneRows[idx]);
+      });
+    });
+  }
+function showUnvalidateModal(row) {
+  const modal = document.getElementById('modal-validation');
+  const content = document.getElementById('modal-content');
+  const [,, type, numero, famille, sousfamille] = row;
+  content.innerHTML = `
+    <div><b>Type :</b> ${type || ''}</div>
+    <div><b>Numéro :</b> ${numero || ''}</div>
+    <div><b>Famille :</b> ${famille || ''}</div>
+    <div><b>Sous-famille :</b> ${sousfamille || ''}</div>
+    <div style="margin-top:18px; color:#d32f2f; font-weight:bold;">Annuler la validation de ce travail ?</div>
+  `;
+  modal.style.display = 'flex';
+  // Annuler
+  document.getElementById('modal-cancel').onclick = () => {
+    modal.style.display = 'none';
+  };
+  // Accepter
+  document.getElementById('modal-accept').onclick = async () => {
+    modal.style.display = 'none';
+    await unvaliderTravaux(row);
+  };
+}
+
+async function unvaliderTravaux(row) {
+  // Met à jour localement la ligne (Travaux ok = 0)
+  const type = row[2];
+  const num = row[3];
+  const famille = row[4];
+  const sousFamille = row[5];
+  for (let i = 0; i < travauxRows.length; i++) {
+    if (
+      travauxRows[i][2] === type &&
+      travauxRows[i][3] === num &&
+      travauxRows[i][4] === famille &&
+      travauxRows[i][5] === sousFamille
+    ) {
+      travauxRows[i][8] = 0;
+      break;
+    }
+  }
+  renderTable(travauxRows);
+  renderDoneTable(travauxRows);
+  // Requête serveur en arrière-plan
+  try {
+    const params = new URLSearchParams({
+      action: 'unvaliderTravaux',
+      type,
+      num,
+      famille,
+      sousFamille
+    });
+    const res = await fetch(URL_TRAVAUX, {
+      method: 'POST',
+      body: params
+    });
+    if (!res.ok) throw new Error('Erreur serveur');
+    // Optionnel : afficher un message de succès
+  } catch (e) {
+  alert("Erreur lors de l'annulation : " + e.message);
+  }
+}
+  function renderTable(rows) {
+    const container = document.getElementById("table-container");
+    container.innerHTML = "";
+    if (!rows.length) {
+      container.innerHTML = '<div class="empty">Aucun travaux à réaliser.</div>';
+      return;
+    }
+    const table = document.createElement("table");
+    // Ignore les lignes validées (Travaux ok = 1) et trie par urgence
+    const sortedRows = [...rows]
+      .filter(row => Number(row[8]) !== 1)
+      .sort((a, b) => {
+        const dateA = parseDate(a[1]);
+        const dateB = parseDate(b[1]);
+        if (!dateA || isNaN(dateA.getTime())) return 1;
+        if (!dateB || isNaN(dateB.getTime())) return -1;
+        return dateA.getTime() - dateB.getTime();
+      });
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Numéro</th>
+          <th>Famille</th>
+          <th>Sous-famille</th>
+          <th>Date Fin Travaux</th>
+          <th>Temps restant</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sortedRows.map((row, idx) => {
+          const [,dateFinTravaux, type, numero, famille, sousfamille,,,, travauxOk] = row;
+          return `<tr class="row-travaux" data-idx="${idx}">
+            <td>${type || ""}</td>
+            <td>${numero || ""}</td>
+            <td>${famille || ""}</td>
+            <td>${sousfamille || ""}</td>
+            <td>${formatDateFr(dateFinTravaux)}</td>
+            <td class="remaining-time" data-datefin="${dateFinTravaux || ""}"></td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+    `;
+    container.appendChild(table);
+    updateRemainingTimes();
+    // Ajout du click sur chaque ligne
+    document.querySelectorAll('.row-travaux').forEach(tr => {
+      tr.addEventListener('click', function() {
+        const idx = parseInt(this.getAttribute('data-idx'));
+        showValidationModal(sortedRows[idx], idx);
+      });
+    });
+    document.getElementById("loader").style.display = "none"; // Cache le loader
+  }
+
+  function showValidationModal(row, idx) {
+    const modal = document.getElementById('modal-validation');
+    const content = document.getElementById('modal-content');
+    const [,, type, numero, famille, sousfamille] = row;
+    content.innerHTML = `
+      <div><b>Type :</b> ${type || ''}</div>
+      <div><b>Numéro :</b> ${numero || ''}</div>
+      <div><b>Famille :</b> ${famille || ''}</div>
+      <div><b>Sous-famille :</b> ${sousfamille || ''}</div>
+    `;
+    modal.style.display = 'flex';
+    // Annuler
+    document.getElementById('modal-cancel').onclick = () => {
+      modal.style.display = 'none';
+    };
+    // Accepter
+    document.getElementById('modal-accept').onclick = async () => {
+      modal.style.display = 'none';
+      await validerTravaux(row);
+      init(); // refresh
+    };
+  }
+
+async function validerTravaux(row) {
+  // Met à jour la Google Sheet : Travaux Row[8] à 1
+  // Envoie tous les identifiants nécessaires en POST
+  const type = row[2];
+  const num = row[3];
+  const famille = row[4];
+  const sousFamille = row[5];
+  // Mise à jour locale immédiate
+  for (let i = 0; i < travauxRows.length; i++) {
+    if (
+      travauxRows[i][2] === type &&
+      travauxRows[i][3] === num &&
+      travauxRows[i][4] === famille &&
+      travauxRows[i][5] === sousFamille
+    ) {
+      travauxRows[i][8] = 1;
+      break;
+    }
+  }
+  renderTable(travauxRows);
+  renderDoneTable(travauxRows);
+  // Requête serveur en arrière-plan
+  try {
+    const params = new URLSearchParams({
+      action: 'validerTravaux',
+      type,
+      num,
+      famille,
+      sousFamille
+    });
+    const res = await fetch(URL_TRAVAUX, {
+      method: 'POST',
+      body: params
+    });
+    if (!res.ok) throw new Error('Erreur serveur');
+    // Optionnel : afficher un message de succès
+  } catch (e) {
+    alert('Erreur lors de la validation : ' + e.message);
+  }
+}
+
+
+    function updateRemainingTimes() {
+      document.querySelectorAll('.remaining-time').forEach(td => {
+        const dateFin = td.getAttribute('data-datefin');
+        const result = getRemainingTime(dateFin);
+        console.log('[Temps restant] dateFin:', dateFin, '| Résultat:', result);
+        td.textContent = result;
+        if (result === "Temps écoulé en attente d'une fiche travaux") {
+          td.style.color = '#d32f2f'; // rouge foncé
+        } else if (result === '2 jours') {
+          td.style.color = 'orange';
+        } else if (result === '1 jour') {
+          td.style.color = '#ff7043'; // rouge clair
+        } else if (/^(\d+) jours$/.test(result)) {
+          const jours = parseInt(result);
+          if (jours > 2 && jours <= 30) {
+            td.style.color = '#43a047'; // vert clair
+          } else if (jours > 30) {
+            td.style.color = 'gray';
+          } else {
+            td.style.color = '';
+          }
+        } else {
+          td.style.color = '';
+        }
+      });
+    }
+
+    function updateElapsedTimes() {
+  // ...existing code...
+    }
+
+    function applyFilter(query) {
+      const q = query.trim().toLowerCase();
+      if (!q) renderTable(travauxRows);
+      else {
+        const filtered = travauxRows.filter(row => {
+          const famille = String(row[4] || "").toLowerCase();
+          return famille.includes(q) && Number(row[9]) !== 1;
+        });
+        renderTable(filtered);
+      }
+    }
+
+    document.getElementById("searchInput").addEventListener("input", e => {
+      applyFilter(e.target.value);
+    });
+    document.getElementById("clearSearch").addEventListener("click", () => {
+      document.getElementById("searchInput").value = "";
+      applyFilter("");
+    });
+
+    function afficherDateFr() {
+      const jours = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+      const mois = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+      const d = new Date();
+      const jour = jours[d.getDay()];
+      const date = d.getDate();
+      const moisNom = mois[d.getMonth()];
+      const annee = d.getFullYear();
+      const heure = d.getHours().toString().padStart(2, '0');
+      const min = d.getMinutes().toString().padStart(2, '0');
+      const txt = `<span class="icon">\
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="5" width="18" height="16" rx="4" fill="#fff" fill-opacity="0.18" stroke="#fff" stroke-width="1.5"/>
+          <rect x="7" y="9" width="10" height="2" rx="1" fill="#fff" fill-opacity="0.5"/>
+          <rect x="7" y="13" width="6" height="2" rx="1" fill="#fff" fill-opacity="0.5"/>
+          <rect x="15" y="13" width="2" height="2" rx="1" fill="#fff" fill-opacity="0.5"/>
+        </svg>
+      </span> ${jour} ${date} ${moisNom} ${annee} — <b>${heure}h${min}</b>`;
+      const el = document.getElementById('date-fr');
+      if (el) el.innerHTML = txt;
+    }
+
+    setInterval(afficherDateFr, 60000); // met à jour l'heure toutes les minutes
+
+    async function init() {
+      travauxRows = await fetchTravaux();
+      applyFilter(document.getElementById("searchInput").value);
+      renderDoneTable(travauxRows);
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(updateRemainingTimes, 30000);
+      afficherDateFr();
+      // Masque le loader après chargement
+      document.getElementById('loader').style.display = 'none';
+      document.getElementById('date-fr').style.display = 'block';
+    }
+
+    init();
+    setInterval(init, 30000);
+  </script>
+</body>
+</html>
