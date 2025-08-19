@@ -78,11 +78,11 @@
     }
     .row-travaux:hover {
       cursor: pointer;
-      background: #e3f2fd44;
+      background: #3285c09a;
     }
     .row-done:hover {
       cursor: pointer;
-      background: #e8f5e944;
+      background: #3285c09a;
     }
 
     .date-fr {
@@ -141,7 +141,12 @@
       <div style="margin-top:18px;color:#1976d2;font-weight:bold;">Chargement...</div>
     </div>
   </div>
-   <div class="date-fr" id="date-fr"></div>
+   <div style="position:absolute;top:24px;left:40px;z-index:11;min-width:220px;">
+     <div id="meteo-fr" style="margin-top:0;position:relative;"></div>
+   </div>
+   <div style="position:absolute;top:24px;right:40px;z-index:11;min-width:220px;">
+     <div class="date-fr" id="date-fr"></div>
+   </div>
   <h1>Liste Travaux A Réaliser</h1>
   <div class="container">
     <div class="search-bar">
@@ -188,7 +193,7 @@ function parseDate(str) {
       const end = typeof dateFin === "string" ? parseDate(dateFin) : dateFin;
       if (!end || isNaN(end.getTime())) return "Inconnu";
       const diffMs = end.getTime() - now.getTime();
-      if (diffMs <= 0) return "Temps écoulé en attente d'une fiche travaux";
+      if (diffMs <= 0) return "Temps écoulé en attente d'exécution des travaux";
       const diffJ = Math.floor(diffMs / (1000 * 60 * 60 * 24));
       if (diffJ >= 1) {
         return diffJ === 1 ? "1 jour" : `${diffJ} jours`;
@@ -460,7 +465,7 @@ async function validerTravaux(row) {
         const result = getRemainingTime(dateFin);
         console.log('[Temps restant] dateFin:', dateFin, '| Résultat:', result);
         td.textContent = result;
-        if (result === "Temps écoulé en attente d'une fiche travaux") {
+        if (result === "Temps écoulé en attente d'exécution des travaux") {
           td.style.color = '#d32f2f'; // rouge foncé
         } else if (result === '2 jours') {
           td.style.color = 'orange';
@@ -527,6 +532,29 @@ async function validerTravaux(row) {
       if (el) el.innerHTML = txt;
     }
 
+    // Ajout du widget Meteoblue pour Allevard
+    function afficherMeteo() {
+      const meteoDiv = document.getElementById('meteo-fr');
+      if (meteoDiv) {
+        meteoDiv.innerHTML = `
+          <div style="display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,#42a5f5 60%,#90caf9 100%);padding:10px 22px;border-radius:18px;box-shadow:0 2px 12px #1976d233;min-width:220px;">
+            <span style="display:inline-block;width:32px;height:32px;">
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="16" cy="22" rx="10" ry="6" fill="#fff" fill-opacity="0.7"/>
+                <circle cx="22" cy="14" r="7" fill="#90caf9" stroke="#1976d2" stroke-width="2"/>
+                <ellipse cx="24" cy="24" rx="4" ry="2" fill="#fff" fill-opacity="0.5"/>
+              </svg>
+            </span>
+            <div style="flex:1;">
+              <div style="font-weight:bold;color:#1976d2;">Météo Allevard</div>
+              <div style="font-size:0.98em;color:#1976d2;">Consultez la météo du jour.</div>
+            </div>
+            <a href="https://www.meteoblue.com/fr/meteo/semaine/allevard_france_3037657" target="_blank" style="color:#1976d2;font-weight:bold;text-decoration:none;font-size:1.05em;">Voir</a>
+          </div>
+        `;
+      }
+    }
+
     setInterval(afficherDateFr, 60000); // met à jour l'heure toutes les minutes
 
     async function init() {
@@ -536,6 +564,7 @@ async function validerTravaux(row) {
       if (timerInterval) clearInterval(timerInterval);
       timerInterval = setInterval(updateRemainingTimes, 30000);
       afficherDateFr();
+      afficherMeteo();
       // Masque le loader après chargement
       document.getElementById('loader').style.display = 'none';
       document.getElementById('date-fr').style.display = 'block';
