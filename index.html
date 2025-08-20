@@ -99,7 +99,7 @@
       letter-spacing: 0.5px;
       z-index: 10;
       user-select: none;
-      min-width: 220px;
+      min-width: 80px;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -170,7 +170,7 @@
   </div>
   <script>
    
-    const URL_TRAVAUX = "https://script.google.com/macros/s/AKfycbweaqiLce1oVK__SZWr_X_GG-Z9rTZQKAENzii1EwXOGy-KYqinKkFeoJdq9EJecwXz/exec";
+    const URL_TRAVAUX = "https://script.google.com/macros/s/AKfycbyE-bg68yo0VZrS2T6IitDAMNF8W0QHSdQVwKI-No1gkYe0nerbER-YvcUYjr3DPlie/exec";
     let travauxRows = [];
     let timerInterval = null;
 function parseDate(str) {
@@ -346,8 +346,6 @@ async function unvaliderTravaux(row) {
       container.innerHTML = '<div class="empty">Aucun travaux à réaliser.</div>';
       return;
     }
-    const table = document.createElement("table");
-    // Ignore les lignes validées (Travaux ok = 1) et trie par urgence
     const sortedRows = [...rows]
       .filter(row => Number(row[8]) !== 1)
       .sort((a, b) => {
@@ -357,6 +355,7 @@ async function unvaliderTravaux(row) {
         if (!dateB || isNaN(dateB.getTime())) return -1;
         return dateA.getTime() - dateB.getTime();
       });
+    const table = document.createElement("table");
     table.innerHTML = `
       <thead>
         <tr>
@@ -366,6 +365,7 @@ async function unvaliderTravaux(row) {
           <th>Sous-famille</th>
           <th>Date Fin Travaux</th>
           <th>Temps restant</th>
+          <th style="text-align:right;">Météo Idéale</th>
         </tr>
       </thead>
       <tbody>
@@ -378,20 +378,102 @@ async function unvaliderTravaux(row) {
             <td>${sousfamille || ""}</td>
             <td>${formatDateFr(dateFinTravaux)}</td>
             <td class="remaining-time" data-datefin="${dateFinTravaux || ""}"></td>
+            <td style="text-align:right;">
+              <div class="meteo-dropdown" style="position:relative;display:inline-block;">
+                <button class="meteo-btn" id="meteo-btn-${idx}" style="padding:6px 18px;border-radius:8px;border:1px solid #90caf9;background:#e3f2fd;color:#1976d2;cursor:pointer;min-width:120px;">
+                  Chargement... ▼
+                </button>
+                <div class="meteo-list" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid #90caf9;border-radius:10px;box-shadow:0 2px 12px #1976d233;min-width:180px;z-index:100;">
+                  <div style="padding:10px 16px;font-weight:bold;color:#1976d2;border-bottom:1px solid #e3f2fd;">Météo Idéale</div>
+                  <div class="meteo-option" style="padding:10px 16px;cursor:pointer;">Ensoleillée</div>
+                  <div class="meteo-option" style="padding:10px 16px;cursor:pointer;">Nuageux</div>
+                  <div class="meteo-option" style="padding:10px 16px;cursor:pointer;">Pluie</div>
+                  <div class="meteo-option" style="padding:10px 16px;cursor:pointer;">Peu importe</div>
+                </div>
+              </div>
+            </td>
           </tr>`;
         }).join("")}
       </tbody>
     `;
     container.appendChild(table);
     updateRemainingTimes();
-    // Ajout du click sur chaque ligne
-    document.querySelectorAll('.row-travaux').forEach(tr => {
-      tr.addEventListener('click', function() {
-        const idx = parseInt(this.getAttribute('data-idx'));
-        showValidationModal(sortedRows[idx], idx);
+    // Affiche la météo idéale pour chaque ligne (localStorage prioritaire)
+    sortedRows.forEach((row, idx) => {
+      const btn = document.getElementById(`meteo-btn-${idx}`);
+      if (!btn) return;
+      const key = `meteo_${row[2]}_${row[3]}_${row[4]}_${row[5]}`;
+      let meteoLocal = localStorage.getItem(key);
+      if (meteoLocal && meteoLocal.trim() !== '') {
+        btn.textContent = meteoLocal.trim() + ' ▼';
+        row[9] = meteoLocal.trim();
+      } else {
+        // Si pas en localStorage, fetch backend puis fallback "Peu importe"
+        const params = new URLSearchParams({
+          action: 'getMeteoIdeale',
+          type: String(row[2] || ''),
+          num: String(row[3] || ''),
+          famille: String(row[4] || ''),
+          sousFamille: String(row[5] || '')
+        });
+        fetch(`${URL_TRAVAUX}?${params.toString()}`)
+          .then(res => res.json())
+          .then(data => {
+            let meteo = (data && data.result === 'ok' && typeof data.meteoIdeale === 'string') ? data.meteoIdeale.trim() : '';
+            btn.textContent = (meteo !== '' ? meteo : 'Peu importe') + ' ▼';
+          })
+          .catch(() => {
+            btn.textContent = 'Peu importe ▼';
+          });
+      }
+    });
+    // Gestion du dropdown météo
+    sortedRows.forEach((row, idx) => {
+      const btn = document.getElementById(`meteo-btn-${idx}`);
+      const dropdown = btn && btn.nextElementSibling;
+      if (!btn || !dropdown) return;
+      btn.onclick = function(e) {
+        e.stopPropagation();
+        // Ferme tous les autres dropdowns
+        document.querySelectorAll('.meteo-list').forEach(list => { list.style.display = 'none'; });
+        dropdown.style.display = 'block';
+      };
+      dropdown.querySelectorAll('.meteo-option').forEach(opt => {
+        opt.onclick = async function(ev) {
+          ev.stopPropagation();
+          const meteoChoisie = this.textContent.trim();
+          btn.textContent = meteoChoisie + ' ▼';
+          dropdown.style.display = 'none';
+          // Sauvegarde en localStorage
+          const key = `meteo_${row[2]}_${row[3]}_${row[4]}_${row[5]}`;
+          localStorage.setItem(key, meteoChoisie);
+          row[9] = meteoChoisie;
+          // Sauvegarde côté backend
+          try {
+            const params = new URLSearchParams({
+              action: 'setMeteoIdeale',
+              type: String(row[2] || ''),
+              num: String(row[3] || ''),
+              famille: String(row[4] || ''),
+              sousFamille: String(row[5] || ''),
+              meteoIdeale: meteoChoisie
+            });
+            await fetch(URL_TRAVAUX, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: params.toString()
+            });
+          } catch (err) {
+            alert('Erreur lors de la sauvegarde météo : ' + err.message);
+          }
+        };
       });
     });
-    document.getElementById("loader").style.display = "none"; // Cache le loader
+    // Ferme le dropdown si clic ailleurs
+    document.addEventListener('click', function(e) {
+      document.querySelectorAll('.meteo-list').forEach(list => { list.style.display = 'none'; });
+    });
+    document.getElementById("loader").style.display = "none";
   }
 
   function showValidationModal(row, idx) {
@@ -537,7 +619,7 @@ async function validerTravaux(row) {
       const meteoDiv = document.getElementById('meteo-fr');
       if (meteoDiv) {
         meteoDiv.innerHTML = `
-          <div style="display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,#42a5f5 60%,#90caf9 100%);padding:10px 22px;border-radius:18px;box-shadow:0 2px 12px #1976d233;min-width:220px;">
+          <div style="display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,#42a5f5 60%,#90caf9 100%);padding:10px 8px;border-radius:18px;box-shadow:0 2px 12px #1976d233;width:80px;min-width:80px;max-width:80px;">
             <span style="display:inline-block;width:32px;height:32px;">
               <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <ellipse cx="16" cy="22" rx="10" ry="6" fill="#fff" fill-opacity="0.7"/>
@@ -545,11 +627,11 @@ async function validerTravaux(row) {
                 <ellipse cx="24" cy="24" rx="4" ry="2" fill="#fff" fill-opacity="0.5"/>
               </svg>
             </span>
-            <div style="flex:1;">
-              <div style="font-weight:bold;color:#1976d2;">Météo Allevard</div>
-              <div style="font-size:0.98em;color:#1976d2;">Consultez la météo du jour.</div>
+            <div style="flex:1;min-width:0;overflow:hidden;">
+              <div style="font-weight:bold;color:#1976d2;font-size:0.85em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Météo Allevard</div>
+              <div style="font-size:0.75em;color:#1976d2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Météo du jour</div>
             </div>
-            <a href="https://www.meteoblue.com/fr/meteo/semaine/allevard_france_3037657" target="_blank" style="color:#1976d2;font-weight:bold;text-decoration:none;font-size:1.05em;">Voir</a>
+            <a href="https://www.meteoblue.com/fr/meteo/semaine/allevard_france_3037657" target="_blank" style="color:#1976d2;font-weight:bold;text-decoration:none;font-size:0.85em;min-width:0;overflow:hidden;">Voir</a>
           </div>
         `;
       }
@@ -558,17 +640,58 @@ async function validerTravaux(row) {
     setInterval(afficherDateFr, 60000); // met à jour l'heure toutes les minutes
 
     async function init() {
-      travauxRows = await fetchTravaux();
-      applyFilter(document.getElementById("searchInput").value);
-      renderDoneTable(travauxRows);
-      if (timerInterval) clearInterval(timerInterval);
-      timerInterval = setInterval(updateRemainingTimes, 30000);
-      afficherDateFr();
-      afficherMeteo();
-      // Masque le loader après chargement
-      document.getElementById('loader').style.display = 'none';
-      document.getElementById('date-fr').style.display = 'block';
+    travauxRows = await fetchTravaux();
+    console.log('[init] appelée');
+    // Remplit les cases météo vides dans la Google Sheet par "Peu importe" (action Apps Script à prévoir)
+    try {
+      const paramsFill = new URLSearchParams({ action: 'fillEmptyMeteoIdeale' });
+      await fetch(`${URL_TRAVAUX}?${paramsFill.toString()}`);
+      console.log('[init] Remplissage des cases météo vides effectué');
+    } catch (err) {
+      console.warn('Erreur lors du remplissage des cases météo vides :', err);
     }
+    // Synchronisation initiale du tableau météo depuis le backend vers le localStorage
+    let meteoKeysExist = false;
+    for (let i = 0; i < travauxRows.length; i++) {
+      const row = travauxRows[i];
+      const key = `meteo_${row[2]}_${row[3]}_${row[4]}_${row[5]}`;
+      if (localStorage.getItem(key)) {
+        meteoKeysExist = true;
+        break;
+      }
+    }
+    if (!meteoKeysExist) {
+      // On récupère tout le tableau météo du backend (action dédiée à prévoir côté Apps Script)
+      try {
+        const params = new URLSearchParams({ action: 'getAllMeteoIdeale' });
+        const res = await fetch(`${URL_TRAVAUX}?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          // data doit être un tableau d'objets {type, num, famille, sousFamille, meteoIdeale}
+          if (Array.isArray(data.meteos)) {
+            data.meteos.forEach(item => {
+              const key = `meteo_${item.type}_${item.num}_${item.famille}_${item.sousFamille}`;
+              if (item.meteoIdeale && item.meteoIdeale.trim() !== '') {
+                localStorage.setItem(key, item.meteoIdeale.trim());
+              }
+            });
+            console.log('[init] Synchronisation météo initiale terminée');
+          }
+        }
+      } catch (err) {
+        console.warn('Erreur lors de la synchronisation météo initiale :', err);
+      }
+    }
+    applyFilter(document.getElementById("searchInput").value);
+    renderDoneTable(travauxRows);
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(updateRemainingTimes, 30000);
+    afficherDateFr();
+    afficherMeteo();
+    // Masque le loader après chargement
+    document.getElementById('loader').style.display = 'none';
+    document.getElementById('date-fr').style.display = 'block';
+  }
 
     init();
     setInterval(init, 30000);
